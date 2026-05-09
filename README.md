@@ -32,4 +32,4 @@
 
 ## 技术
 
-纯静态页面，零依赖。Canvas 粒子系统 + CSS 动画 + Web Audio API / HTML5 Audio。
+纯静态页面，单文件零依赖。Canvas 粒子系统 + CSS 动画 + Web Audio API 八音盒旋律。
