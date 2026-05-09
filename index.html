@@ -88,58 +88,6 @@
     75%  { transform: translateY(-16px) rotate(4deg) scale(1.05); }
   }
 
-  /* ---------- Music Button ---------- */
-  .music-btn {
-    position: fixed;
-    top: calc(env(safe-area-inset-top, 16px) + 10px);
-    right: calc(env(safe-area-inset-right, 16px) + 10px);
-    z-index: 100;
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    border: 1px solid rgba(233,180,160,0.3);
-    background: rgba(255,248,240,0.8);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    color: #c2185b;
-    font-size: 20px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.3s;
-    box-shadow: 0 2px 8px rgba(180,100,80,0.1);
-    -webkit-tap-highlight-color: transparent;
-    animation: cardEnter 1.2s 1s cubic-bezier(0.22, 0.61, 0.36, 1) both;
-    opacity: 0;
-  }
-
-  .music-btn:hover {
-    background: rgba(255,240,232,0.95);
-    box-shadow: 0 4px 16px rgba(200,120,100,0.2);
-  }
-
-  .music-btn.playing {
-    background: rgba(233,30,99,0.12);
-    border-color: rgba(233,30,99,0.3);
-    opacity: 1;
-  }
-
-  .music-btn.playing .note-icon {
-    animation: noteSpin 3s linear infinite;
-    display: inline-block;
-  }
-
-  @keyframes noteSpin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  @keyframes musicPulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(233,30,99,0.2); }
-    50% { box-shadow: 0 0 0 10px rgba(233,30,99,0); }
-  }
-
   /* ---------- Card ---------- */
   .card {
     position: relative;
@@ -393,7 +341,6 @@
     .hint { font-size: 13px; max-width: 95%; }
     .bg-decor { font-size: 28px !important; opacity: 0.12; }
     .toast.big { font-size: 15px; padding: 12px 20px; letter-spacing: 1px; background-size: 300% 100%; }
-    .music-btn { width: 38px; height: 38px; font-size: 18px; }
   }
 
   @media (max-width: 380px) {
@@ -414,7 +361,6 @@
     .bg-decor { font-size: 22px !important; opacity: 0.1; }
     .toast.big { font-size: 13px; padding: 8px 14px; letter-spacing: 0; background-size: 300% 100%; }
     .toast { font-size: 12px; padding: 10px 16px; }
-    .music-btn { width: 34px; height: 34px; font-size: 16px; }
   }
 </style>
 </head>
@@ -430,8 +376,6 @@
 <span class="bg-decor">🌼</span>
 <span class="bg-decor">✨</span>
 <span class="bg-decor">💖</span>
-
-<button id="musicBtn" class="music-btn" title="播放音乐"><span class="note-icon">♪</span></button>
 
 <div class="main-container">
   <div class="card">
@@ -853,24 +797,68 @@
   }
 
   // ---------- Background Music ----------
-  const bgMusic = new Audio('background-music.mp3');
-  bgMusic.loop = true;
-  bgMusic.volume = 0.8;
-  bgMusic.setAttribute('playsinline', '');
-  bgMusic.setAttribute('webkit-playsinline', '');
+  let musicCtx = null;
+  let musicPlaying = false;
+  let musicStep = 0;
 
-  const musicBtn = document.getElementById('musicBtn');
+  // Light cheerful melody (C major pentatonic, music-box style)
+  const melodyNotes = [
+    523, 659, 784, 659, 523, 587, 659, 523,
+    440, 523, 587, 659, 784, 880, 784, 659,
+    523, 659, 784, 1047, 880, 784, 659, 587,
+    523, 587, 659, 523, 440, 523, 659, 523,
+  ];
+  const melodyDurations = [
+    0.25, 0.25, 0.35, 0.2, 0.2, 0.2, 0.4, 0.3,
+    0.2, 0.2, 0.2, 0.25, 0.25, 0.35, 0.2, 0.3,
+    0.25, 0.25, 0.4, 0.5, 0.2, 0.2, 0.3, 0.3,
+    0.2, 0.2, 0.35, 0.2, 0.2, 0.25, 0.4, 0.4,
+  ];
 
-  musicBtn.addEventListener('click', function(e) {
-    e.stopPropagation();
-    if (bgMusic.paused) {
-      bgMusic.play().then(function() {
-        musicBtn.classList.add('playing');
-      }).catch(function() {});
-    } else {
-      bgMusic.pause();
-      musicBtn.classList.remove('playing');
-    }
+  function playNote(freq, duration) {
+    if (!musicCtx) return;
+    const t = musicCtx.currentTime;
+    const osc = musicCtx.createOscillator();
+    const gain = musicCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, t);
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.05, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    osc.connect(gain);
+    gain.connect(musicCtx.destination);
+    osc.start(t);
+    osc.stop(t + duration + 0.05);
+  }
+
+  function stepMelody() {
+    if (!musicPlaying) return;
+    const i = musicStep % melodyNotes.length;
+    playNote(melodyNotes[i], melodyDurations[i]);
+    musicStep++;
+    setTimeout(stepMelody, melodyDurations[i] * 1000 * 0.9);
+  }
+
+  function startMusic() {
+    if (musicPlaying) return;
+    try {
+      if (!musicCtx) musicCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (musicCtx.state === 'suspended') musicCtx.resume();
+      musicPlaying = true;
+      musicStep = 0;
+      stepMelody();
+    } catch(e) {}
+  }
+
+  document.addEventListener('click', function startOnFirstTouch() {
+    startMusic();
+    document.removeEventListener('click', startOnFirstTouch);
+    document.removeEventListener('touchend', startOnFirstTouch);
+  });
+  document.addEventListener('touchend', function startOnFirstTouch() {
+    startMusic();
+    document.removeEventListener('click', startOnFirstTouch);
+    document.removeEventListener('touchend', startOnFirstTouch);
   });
 
   // ---------- Start ----------
